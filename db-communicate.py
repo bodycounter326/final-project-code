@@ -3,6 +3,8 @@ import sys
 import board
 import busio
 
+import threading
+import datetime
 from digitalio import DigitalInOut
 from adafruit_vl53l0x import VL53L0X
 
@@ -15,11 +17,15 @@ load_dotenv()
 TIMEZONE = os.getenv("TIMEZONE")
 URI = os.getenv("URI")
 TABLE = os.getenv("TABLE")
+LOG_TABLE = os.getenv("LOG_TABLE") # Table that holds the number of people every hour
 
 #current commands:
 EXIT_CMD = f"UPDATE {TABLE} SET current_count = current_count - 1 WHERE id = 1"
 ENTER_CMD = f"UPDATE {TABLE} SET current_count = current_count + 1 WHERE id = 1"
 GET_COUNT = f"SELECT current_count FROM {TABLE} WHERE id = 1"
+RESET_CMD = f"UPDATE {TABLE} SET current_count = 0 WHERE id = 1"
+LOG_COUNT = f"INSERT INTO {LOG_TABLE} (datetime, num_people) VALUES (now() AT TIME ZONE '{TIMEZONE}', (SELECT current_count FROM {TABLE} WHERE id = 1))"
+DELETE_LOG = f"DELETE FROM {LOG_TABLE} WHERE datetime < now() AT TIME ZONE '{TIMEZONE}' - INTERVAL '5 days')"
 
 TIMEOUT_SECONDS = 3.0
 TOLERANCE = 100  # Tolerance for the sensor to be tripped
@@ -59,6 +65,31 @@ def get_current_count():
     conn.close()
     return result
 
+def log_count():
+    while True:
+        curr_time = datetime.datetime.now()
+        if  7 <= curr_time.hour <= 21:
+            try:
+                update_db(DELETE_LOG) # delete entries older than 5 days
+                count = get_current_count()
+                conn = connect_db()
+                cursor = conn.cursor()
+                cursor.execute(LOG_COUNT, (curr_time, count))
+                conn.commit()
+                cursor.close()
+                conn.close()
+                print(f"Logged count: {count} at {curr_time}")
+            except Exception as e:
+                print(f"Error logging count: {e}")
+        #add 1 hr to current time
+        next_hour = (curr_time.replace(microsecond=0, second=0, minute=0) +
+                     datetime.timedelta(hours=1))
+        sleep_seconds = (next_hour - curr_time).total_seconds()
+
+        # Sleep until the next hour
+        time.sleep(sleep_seconds)
+
+
 
 # --------------------------------Sensor setup----------------------------------
 def init_sensors(vl53):
@@ -68,8 +99,8 @@ def init_sensors(vl53):
     i2c.unlock()
     # declare the digital output pins connected to the "SHDN" pin on each VL53L0X sensor
     xshut = [
-        DigitalInOut(board.D16),
-        DigitalInOut(board.D21)
+        DigitalInOut(board.D21),
+        DigitalInOut(board.D16)
     ]
 
     for power_pin in xshut:
@@ -165,8 +196,8 @@ def detect_movement():
 
             # Check #2: Timeout handling
             # Timeout if only one sensor triggered but not the other (a person did not completely enter the gym, or there was something that the sensor dectected that wasnt a person)
-            #We must check each sensor state here... Is this the most efficent? I am not sure...
-            #If one sensor has reached "reset" and the other has not, and if the time between the current time and when the sensor was "reset" is greater than the timeout period, completely reset the sensor
+            # We must check each sensor state here... Is this the most efficent? I am not sure...
+            # If one sensor has reached "reset" and the other has not, and if the time between the current time and when the sensor was "reset" is greater than the timeout period, completely reset the sensor
             if (sensor_states[0]["set_time"] and not sensor_states[1]["set_time"] and
                 current_time - sensor_states[0]["set_time"] > TIMEOUT_SECONDS):
                 print("Timeout: Only sensor 1 was triggered. Resetting.")
@@ -188,7 +219,7 @@ def detect_movement():
                     print("Person standing under the door")
                     last_event_time = current_time
 
-            #Check #4: Determining the direction of movement
+            # Check #4: Determining the direction of movement
             # If both sensors have their set and reset times filled...
             if (sensor_states[0]["set_time"] is not None and
                 sensor_states[1]["set_time"] is not None and
@@ -244,6 +275,12 @@ if __name__ == "__main__":
         print("Setting up sensors...")
         init_sensors(vl53)
         init_baseline(vl53, baseline_distance)
+        print("reset database...")
+        update_db(RESET_CMD)
+
+        logging_thread = threading.Thread(target=log_count, daemon=True)
+        logging_thread.start()
+
         print("beginning loop...")
         detect_movement()
     except KeyboardInterrupt:
