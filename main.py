@@ -103,6 +103,7 @@ def init_sensors(vl53):
         pass
     i2c.unlock()
     # declare the digital output pins connected to the "SHDN" pin on each VL53L0X sensor
+    #switch the BCM pins if you want to change the direction of the sensors are in
     xshut = [
         DigitalInOut(board.D16),
         DigitalInOut(board.D21)
@@ -163,8 +164,8 @@ def detect_movement():
         {"set_time": None, "reset_time": None, "is_active": False, "last_distance": 0}
     ]
     #used to prevent the sensor from triggering multiple times...
-    last_event_time = time.time()  # Track when we last processed an event
-    event_history = []  # Track recent sensor activations to help with fast movement
+    last_event_time = time.time() 
+    event_history = []  # We make use of a buffer of events, pushing them as states change
 
     while True:
         try:
@@ -204,7 +205,7 @@ def detect_movement():
 
                         #Add a "reset" event to the history
                         event_history.append({"sensor": i, "action": "reset", "time": timestamp})
-                        if len(event_history) > 20:
+                        if len(event_history) > 20: #20 is an arbitrary time
                             event_history.pop(0)
 
             # Check #2: Timeout handling - check if only one sensor was triggered, just reset it after the timeout period
@@ -254,16 +255,8 @@ def detect_movement():
                     else:
                         print("Person exiting the room")
                         update_db(EXIT_CMD)
-                #else:
-                    # # Not enough history data, fall back to traditional comparison
-                    # if sensor_states[0]["set_time"] < sensor_states[1]["set_time"]:
-                    #     print("Person entering the room")
-                    #     update_db(ENTER_CMD)
-                    # else:
-                    #     print("Person exiting the room")
-                    #     update_db(EXIT_CMD)
 
-                # Reset all sensor states after processing the event
+                # Reset all sensor states after a person has passed through
                 for i in range(len(sensor_states)):
                     sensor_states[i]["set_time"] = None
                     sensor_states[i]["reset_time"] = None
