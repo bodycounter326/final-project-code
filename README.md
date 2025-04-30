@@ -13,10 +13,10 @@ Steps for installing:
 
 6. Run: `python3 <filename>`
 
-##Project Overview
+## Project Overview
 Our project aims to keep track of how many people are going in and out of the Calvin Gym. We make use of a raspberry pi 4 and two VL53L0X time of flight sensors. These sensors use infrared beams to detect motion. By using two sensors, we can tell which direction a person is walking, and use this to keep track of how many people are currently in the gym. We send these updates to a database hosted in the cloud. This data is also publicly available at [this website](https://morren-fitness-center.azurewebsites.net/).
 
-##Main algorithm
+## Main algorithm
 Upon setup, each sensor will have the following attributes: 
 1. set_time: this is the first time that the sensor detects motion.
 2. reset_time: this is the time that the sensor reaches the baseline distance of detection.
@@ -29,3 +29,5 @@ In an infinite loop, each sensor will be checked for the following conditions:
 3. If both sensors are still detecting an object after about 2 seconds, there is probably an object/person under the door.
 4. If both the set reset times are set for a sensor, this means the person has passed through the door. We then sort the "set" events based on timestamp, and compare which direction the person came through. We make use of a buffer of sorts to keep track of events that occur. If a person has walked through, the sensors are reset.
 5. This loop repeats ever 0.01 seconds.
+
+Upon startup, we have main.py reset the current count to 0, and update the history every hour.
