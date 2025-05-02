@@ -49,6 +49,7 @@ def connect_db():
         password=uri.password,
         host=uri.hostname,
         port=uri.port,
+        sslmode = 'require'
     )
 
 
