@@ -1,14 +1,16 @@
+# This code is taken from
+# https://docs.circuitpython.org/projects/vl53l0x/en/latest/examples.html#multiple-vl53l0x-on-same-i2c-bus
+# We used this file for testing the VL53L0X sensors and getting them up and running.
+
 import time
 import board
 from digitalio import DigitalInOut
 from adafruit_vl53l0x import VL53L0X
-
-# declare the singleton variable for the default I2C bus
-# i2c = board.I2C()  # uses board.SCL and board.SDA
-# i2c = board.STEMMA_I2C()  # For using the built-in STEMMA QT connector on a microcontroller
-
 import busio
+
+
 i2c = busio.I2C(board.SCL, board.SDA)
+# This lock was crutial for getting multiple sensors working,  but is not in the basic setup code. This took quite a while to troubleshoot.
 while not i2c.try_lock():
     pass
 i2c.unlock()
@@ -38,7 +40,7 @@ for i, power_pin in enumerate(xshut):
         sensor = VL53L0X(i2c)
         # vl53.insert(i, sensor)
         # vl53.insert(i, VL53L0X(i2c))  # also performs VL53L0X hardware check
-    
+
         # no need to change the address of the last VL53L0X sensor
         if i < len(xshut) - 1:
             # default address is 0x29. Change that to something else
